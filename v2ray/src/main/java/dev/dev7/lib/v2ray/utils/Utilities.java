@@ -27,8 +27,11 @@ import libv2ray.Libv2ray;
 
 public class Utilities {
 
-    public static String getDeviceIdForXUDPBaseKey() {
-        String androidId = Settings.Secure.ANDROID_ID;
+    public static String getDeviceIdForXUDPBaseKey(Context context) {
+        String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
+        if (androidId == null || androidId.isEmpty()) {
+            androidId = "unknown-device";
+        }
         byte[] androidIdBytes = androidId.getBytes(StandardCharsets.UTF_8);
         return Base64.encodeToString(Arrays.copyOf(androidIdBytes, 32), Base64.NO_PADDING | Base64.URL_SAFE);
     }
@@ -109,12 +112,14 @@ public class Utilities {
         currentConfig.blockedApplications = blockedApplications;
         try {
             JSONObject config_json = new JSONObject(normalizeV2rayFullConfig(config));
+            boolean foundSocks = false;
             try {
                 JSONArray inbounds = config_json.getJSONArray("inbounds");
                 for (int i = 0; i < inbounds.length(); i++) {
                     try {
                         if (inbounds.getJSONObject(i).getString("protocol").equals("socks")) {
                             currentConfig.localSocksPort = inbounds.getJSONObject(i).getInt("port");
+                            foundSocks = true;
                         }
                     } catch (Exception e) {
                         //ignore
@@ -129,6 +134,10 @@ public class Utilities {
                 }
             } catch (Exception e) {
                 Log.w(Utilities.class.getSimpleName(), "startCore warn => can`t find inbound port of socks5 or http.");
+                return false;
+            }
+            if (!foundSocks) {
+                Log.w(Utilities.class.getSimpleName(), "startCore warn => socks inbound is required.");
                 return false;
             }
             try {

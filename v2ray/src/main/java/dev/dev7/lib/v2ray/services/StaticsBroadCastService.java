@@ -11,13 +11,11 @@ import static dev.dev7.lib.v2ray.utils.V2rayConstants.SERVICE_TYPE_BROADCAST_EXT
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.SERVICE_UPLOAD_SPEED_BROADCAST_EXTRA;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.SERVICE_UPLOAD_TRAFFIC_BROADCAST_EXTRA;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.os.CountDownTimer;
-
-import androidx.annotation.RequiresApi;
+import android.os.Handler;
+import android.os.Looper;
 
 import dev.dev7.lib.v2ray.interfaces.StateListener;
 import dev.dev7.lib.v2ray.interfaces.TrafficListener;
@@ -38,19 +36,17 @@ public class StaticsBroadCastService {
         resetCounter();
         isCounterStarted = false;
         countDownTimer = new CountDownTimer(604800000, 1000) {
-            @SuppressLint("ObsoleteSdkInt")
-            @RequiresApi(api = Build.VERSION_CODES.M)
             public void onTick(long millisUntilFinished) {
                 seconds++;
-                if (seconds == 59) {
-                    minutes++;
+                if (seconds >= 60) {
                     seconds = 0;
+                    minutes++;
                 }
-                if (minutes == 59) {
+                if (minutes >= 60) {
                     minutes = 0;
                     hours++;
                 }
-                if (hours == 23) {
+                if (hours >= 24) {
                     hours = 0;
                 }
                 if (isTrafficStaticsEnabled) {
@@ -67,8 +63,13 @@ public class StaticsBroadCastService {
             }
 
             public void onFinish() {
-                countDownTimer.cancel();
-                new StaticsBroadCastService(targetService, stateListener).start();
+                isCounterStarted = false;
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    if (!isCounterStarted) {
+                        countDownTimer.start();
+                        isCounterStarted = true;
+                    }
+                });
             }
         };
     }
@@ -80,10 +81,13 @@ public class StaticsBroadCastService {
         hours = 0;
         uploadSpeed = 0;
         downloadSpeed = 0;
+        totalDownload = 0;
+        totalUpload = 0;
     }
 
     public void start() {
         if (!isCounterStarted) {
+            resetCounter();
             countDownTimer.start();
             isCounterStarted = true;
         }

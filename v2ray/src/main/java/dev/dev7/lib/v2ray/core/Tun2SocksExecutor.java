@@ -30,7 +30,15 @@ public class Tun2SocksExecutor {
     }
 
     public boolean isTun2SucksRunning() {
-        return tun2SocksProcess != null;
+        if (tun2SocksProcess == null) {
+            return false;
+        }
+        try {
+            tun2SocksProcess.exitValue();
+            return false;
+        } catch (IllegalThreadStateException stillRunning) {
+            return true;
+        }
     }
 
     public void run(final Context context, final int socksPort, final int localDnsPort) {
@@ -75,8 +83,10 @@ public class Tun2SocksExecutor {
             }, "t2s_main_thread").start();
         } catch (Exception e) {
             tun2SocksListener.OnTun2SocksHasMassage(V2rayConstants.CORE_STATES.IDLE, "Tun2socks Run Error =>> " + e);
-            tun2SocksProcess.destroy();
-            tun2SocksProcess = null;
+            if (tun2SocksProcess != null) {
+                tun2SocksProcess.destroy();
+                tun2SocksProcess = null;
+            }
         }
     }
 

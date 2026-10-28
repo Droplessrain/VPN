@@ -30,6 +30,7 @@ public class NotificationService {
     private final NotificationCompat.Builder notifcationBuilder;
     public boolean isNotificationOnGoing;
     private final int NOTIFICATION_ID = 1;
+    private String applicationName;
 
     public TrafficListener trafficListener = new TrafficListener() {
         @Override
@@ -53,7 +54,8 @@ public class NotificationService {
         launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         PendingIntent notificationContentPendingIntent = PendingIntent.getActivity(targetService, 0, launchIntent, judgeForNotificationFlag());
         String notificationChannelID = "";
-        String applicationName = "unknown_name";
+        applicationName = "unknown_name";
+        getNotificationManager(targetService);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 PackageManager pm = targetService.getApplicationContext().getPackageManager();
@@ -84,6 +86,12 @@ public class NotificationService {
         } else {
             notifcationBuilder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFAULT);
         }
+        ensureForeground(targetService);
+    }
+
+    public void ensureForeground(final Service targetService) {
+        notifcationBuilder.setContentTitle(applicationName + " Connecting...")
+                .setContentText("Connecting on process.\nTap to open application");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             targetService.startForeground(NOTIFICATION_ID, notifcationBuilder.build(), FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         } else {

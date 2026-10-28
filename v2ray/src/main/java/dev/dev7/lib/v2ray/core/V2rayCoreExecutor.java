@@ -2,7 +2,6 @@ package dev.dev7.lib.v2ray.core;
 
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_EXTRA;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_INTENT;
-import static dev.dev7.lib.v2ray.utils.Utilities.getDeviceIdForXUDPBaseKey;
 import static dev.dev7.lib.v2ray.utils.Utilities.getUserAssetsPath;
 
 import android.app.Service;
@@ -25,18 +24,21 @@ public class V2rayCoreExecutor {
 
     private V2rayConstants.CORE_STATES coreState;
     public V2rayServicesListener v2rayServicesListener;
+    private boolean preserveServiceOnShutdown = false;
 
 
     public final V2RayPoint v2RayPoint = Libv2ray.newV2RayPoint(new V2RayVPNServiceSupportsSet() {
         @Override
         public long shutdown() {
+            if (preserveServiceOnShutdown) {
+                return 0;
+            }
             try {
                 if (v2rayServicesListener == null) {
                     Log.d(V2rayCoreExecutor.class.getSimpleName(), "shutdown => can`t find initialed service.");
                     return -1;
                 }
                 v2rayServicesListener.stopService();
-                v2rayServicesListener = null;
                 return 0;
             } catch (Exception e) {
                 Log.d(V2rayCoreExecutor.class.getSimpleName(), "shutdown =>", e);
@@ -51,9 +53,10 @@ public class V2rayCoreExecutor {
 
         @Override
         public boolean protect(long l) {
-            if (v2rayServicesListener != null)
+            if (v2rayServicesListener != null) {
                 return v2rayServicesListener.onProtect((int) l);
-            return true;
+            }
+            return false;
         }
 
         @Override
@@ -63,16 +66,18 @@ public class V2rayCoreExecutor {
 
         @Override
         public long setup(String s) {
-            if (v2rayServicesListener != null) {
-                try {
-                    coreState = V2rayConstants.CORE_STATES.RUNNING;
-                    v2rayServicesListener.startService();
-                } catch (Exception e) {
-                    Log.d(V2rayCoreExecutor.class.getSimpleName(), "setupFailed => ", e);
-                    return -1;
-                }
+            if (v2rayServicesListener == null) {
+                Log.d(V2rayCoreExecutor.class.getSimpleName(), "setup => service listener is missing.");
+                return -1;
             }
-            return 0;
+            try {
+                coreState = V2rayConstants.CORE_STATES.RUNNING;
+                v2rayServicesListener.startService();
+                return 0;
+            } catch (Exception e) {
+                Log.d(V2rayCoreExecutor.class.getSimpleName(), "setupFailed => ", e);
+                return -1;
+            }
         }
     }, Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1);
 
@@ -80,14 +85,19 @@ public class V2rayCoreExecutor {
     public V2rayCoreExecutor(final Service targetService) {
         this.v2rayServicesListener = (V2rayServicesListener) targetService;
         Seq.setContext(targetService);
-        Libv2ray.initV2Env(getUserAssetsPath(targetService.getApplicationContext()), getDeviceIdForXUDPBaseKey());
+        Libv2ray.initV2Env(getUserAssetsPath(targetService.getApplicationContext()), Utilities.getDeviceIdForXUDPBaseKey(targetService.getApplicationContext()));
         coreState = V2rayConstants.CORE_STATES.IDLE;
         Log.d(V2rayCoreExecutor.class.getSimpleName(), "V2rayCoreExecutor -> New initialize from : " + targetService.getClass().getSimpleName());
     }
 
     public void startCore(final V2rayConfigModel v2rayConfig) {
         try {
-            stopCore(false);
+            preserveServiceOnShutdown = true;
+            try {
+                stopCore(false);
+            } finally {
+                preserveServiceOnShutdown = false;
+            }
             try {
                 Libv2ray.testConfig(v2rayConfig.fullJsonConfig);
             } catch (Exception testException) {
@@ -101,6 +111,7 @@ public class V2rayCoreExecutor {
             v2RayPoint.runLoop(false);
         } catch (Exception e) {
             Log.e(V2rayCoreExecutor.class.getSimpleName(), "startCore =>", e);
+            stopCore(true);
         }
     }
 
@@ -108,13 +119,17 @@ public class V2rayCoreExecutor {
         try {
             if (v2RayPoint.getIsRunning()) {
                 v2RayPoint.stopLoop();
-                if (shouldStopService) {
-                    v2rayServicesListener.stopService();
-                }
-                coreState = V2rayConstants.CORE_STATES.STOPPED;
             }
+            coreState = V2rayConstants.CORE_STATES.STOPPED;
         } catch (Exception e) {
             Log.d(V2rayCoreExecutor.class.getSimpleName(), "stopCore =>", e);
+        }
+        if (shouldStopService && v2rayServicesListener != null && !preserveServiceOnShutdown) {
+            try {
+                v2rayServicesListener.stopService();
+            } catch (Exception e) {
+                Log.d(V2rayCoreExecutor.class.getSimpleName(), "stopCore stopService =>", e);
+            }
         }
     }
 
@@ -137,20 +152,22 @@ public class V2rayCoreExecutor {
     }
 
     public void broadCastCurrentServerDelay() {
+        if (v2rayServicesListener == null || v2rayServicesListener.getService() == null) {
+            return;
+        }
+        int serverDelay = -1;
         try {
-            if (v2rayServicesListener != null) {
-                int serverDelay = (int) v2RayPoint.measureDelay("");
-                Intent serverDelayBroadcast = new Intent(V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_INTENT);
-                serverDelayBroadcast.setPackage(v2rayServicesListener.getService().getPackageName());
-                serverDelayBroadcast.putExtra(V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_EXTRA, serverDelay);
-                v2rayServicesListener.getService().sendBroadcast(serverDelayBroadcast);
-            }
+            serverDelay = (int) v2RayPoint.measureDelay("");
         } catch (Exception e) {
             Log.d(V2rayCoreExecutor.class.getSimpleName(), "broadCastCurrentServerDelay => ", e);
+        }
+        try {
             Intent serverDelayBroadcast = new Intent(V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_INTENT);
             serverDelayBroadcast.setPackage(v2rayServicesListener.getService().getPackageName());
-            serverDelayBroadcast.putExtra(V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_EXTRA, -1);
+            serverDelayBroadcast.putExtra(V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_EXTRA, serverDelay);
             v2rayServicesListener.getService().sendBroadcast(serverDelayBroadcast);
+        } catch (Exception e) {
+            Log.d(V2rayCoreExecutor.class.getSimpleName(), "broadCastCurrentServerDelay send => ", e);
         }
     }
 
