@@ -9,6 +9,7 @@ import static dev.dev7.lib.v2ray.utils.V2rayConstants.SERVICE_UPLOAD_SPEED_BROAD
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.SERVICE_UPLOAD_TRAFFIC_BROADCAST_EXTRA;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.V2RAY_SERVICE_COMMAND_EXTRA;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.V2RAY_SERVICE_COMMAND_INTENT;
+import static dev.dev7.lib.v2ray.utils.V2rayConstants.DEFAULT_OUT_BOUND_PLACE_IN_FULL_JSON_CONFIG;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.V2RAY_SERVICE_CONFIG_EXTRA;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_EXTRA;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.V2RAY_SERVICE_CURRENT_CONFIG_DELAY_BROADCAST_INTENT;
@@ -118,12 +119,46 @@ public class V2rayController {
         activityResultLauncher.launch(vpnServicePrepareIntent);
     }
 
+    public static final class ServerProbe {
+        public final long delayMs;
+        public final String error;
+
+        public ServerProbe(long delayMs, String error) {
+            this.delayMs = delayMs;
+            this.error = error;
+        }
+    }
+
+    public static ServerProbe probeServer(final String config) {
+        synchronized (V2rayController.class) {
+            if (config == null || config.trim().isEmpty()) {
+                return new ServerProbe(-1, "empty config");
+            }
+            try {
+                String fullConfig = Utilities.normalizeV2rayFullConfig(config.trim());
+                if (fullConfig == null || fullConfig.contains(DEFAULT_OUT_BOUND_PLACE_IN_FULL_JSON_CONFIG)) {
+                    return new ServerProbe(-1, "link was not converted to an outbound");
+                }
+                V2rayCoreExecutor.DelayMeasure measure = V2rayCoreExecutor.measureConfig(fullConfig);
+                return new ServerProbe(measure.delayMs, measure.error);
+            } catch (Exception error) {
+                String message = error.getMessage();
+                if (message == null || message.trim().isEmpty()) {
+                    message = error.getClass().getSimpleName();
+                }
+                return new ServerProbe(-1, message.replace('\n', ' ').trim());
+            }
+        }
+    }
+
     public static boolean startV2ray(final Activity activity, final String remark, final String config, final ArrayList<String> blocked_apps) {
         if (!Utilities.refillV2rayConfig(remark, config, blocked_apps)) {
+            Log.w("FastConnect", "config rejected: socks inbound missing or json is invalid");
             Toast.makeText(activity, "Invalid config. A SOCKS inbound is required.", Toast.LENGTH_LONG).show();
             return false;
         }
         if (!isPreparedForConnection(activity)) {
+            Log.i("FastConnect", "waiting for VPN permission");
             prepareForConnection(activity);
             return false;
         }
@@ -204,7 +239,7 @@ public class V2rayController {
     }
 
     public static long getV2rayServerDelay(final String config) {
-        return V2rayCoreExecutor.getConfigDelay(Utilities.normalizeV2rayFullConfig(config));
+        return probeServer(config).delayMs;
     }
 
     public static String getCoreVersion() {
@@ -249,7 +284,7 @@ public class V2rayController {
                 context.startService(start_intent);
             }
         } catch (Exception e) {
-            Log.e(TAG, "startTunnel failed", e);
+            Log.e("FastConnect", "tunnel did not start: " + e.getMessage(), e);
             connectionState = V2rayConstants.CONNECTION_STATES.DISCONNECTED;
             broadcastConnectionState(context, V2rayConstants.CONNECTION_STATES.DISCONNECTED);
         }

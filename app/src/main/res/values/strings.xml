@@ -1,3 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">V2ray-Example</string>
+    <string name="btn_light_theme">light theme</string>
+    <string name="btn_dark_theme">dark theme</string>
+    <string name="btn_language">Language: English</string>
+    <string name="label_server">Server :</string>
+    <string name="label_config">V2ray Config :</string>
+    <string name="hint_config">v2ray config goes here</string>
+    <string name="saved_custom">Saved / custom</string>
+    <string name="country_label">Country : %1$s %2$s</string>
+    <string name="country_unknown">Country : unknown</string>
+    <string name="connection_mode">connection mode : %1$s</string>
+    <string name="server_delay">server delay : %1$s</string>
+    <string name="server_delay_tap">server delay : tap to test</string>
+    <string name="server_delay_measuring">server delay : measuring…</string>
+    <string name="connected_delay">connected server delay : %1$s</string>
+    <string name="connected_delay_wait">connected server delay : wait for connection</string>
+    <string name="connected_delay_measuring">connected server delay : measuring…</string>
+    <string name="connection_time">connection time : %1$s</string>
+    <string name="connection_speed">connection speed : %1$s | %2$s</string>
+    <string name="connection_traffic">connection traffic : %1$s | %2$s</string>
+    <string name="btn_fast_connect">fast connect</string>
+    <string name="btn_stop_scan">stop scan</string>
+    <string name="status_not_scanned">not scanned</string>
+    <string name="status_scan_running">scan is still running</string>
+    <string name="status_stopping">stopping after the current server</string>
+    <string name="status_disconnect_first">disconnect the tunnel first</string>
+    <string name="status_list_empty">server list is empty</string>
+    <string name="status_progress">%1$d/%2$d  working %3$d  dead %4$d</string>
+    <string name="status_done">done  working %1$d  dead %2$d</string>
+    <string name="status_stopped">stopped  working %1$d  dead %2$d</string>
+    <string name="status_saved_scan">saved scan  working %1$d  dead %2$d</string>
+    <string name="state_connected">CONNECTED</string>
+    <string name="state_disconnected">DISCONNECTED</string>
+    <string name="state_connecting">CONNECTING</string>
 </resources>

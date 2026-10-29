@@ -5,4 +5,9 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="gray">#302F2F</color>
+    <color name="background_dark">#121212</color>
+    <color name="config_bg_dark">#1E1E1E</color>
+    <color name="config_bg_light">#F7F7F7</color>
+    <color name="config_stroke_dark">#555555</color>
+    <color name="config_stroke_light">#BDBDBD</color>
 </resources>

@@ -102,7 +102,7 @@ public class V2rayCoreExecutor {
                 Libv2ray.testConfig(v2rayConfig.fullJsonConfig);
             } catch (Exception testException) {
                 coreState = V2rayConstants.CORE_STATES.STOPPED;
-                Log.d(V2rayCoreExecutor.class.getSimpleName(), "startCore => v2ray json config not valid.", testException);
+                Log.w("FastConnect", "core rejected config: " + messageOf(testException), testException);
                 stopCore(true);
                 return;
             }
@@ -110,7 +110,7 @@ public class V2rayCoreExecutor {
             v2RayPoint.setDomainName(Utilities.normalizeIpv6(v2rayConfig.currentServerAddress) + ":" + v2rayConfig.currentServerPort);
             v2RayPoint.runLoop(false);
         } catch (Exception e) {
-            Log.e(V2rayCoreExecutor.class.getSimpleName(), "startCore =>", e);
+            Log.e("FastConnect", "core failed to run: " + messageOf(e), e);
             stopCore(true);
         }
     }
@@ -171,15 +171,32 @@ public class V2rayCoreExecutor {
         }
     }
 
+    public static final class DelayMeasure {
+        public final long delayMs;
+        public final String error;
+
+        public DelayMeasure(long delayMs, String error) {
+            this.delayMs = delayMs;
+            this.error = error;
+        }
+    }
+
     public static long getConfigDelay(final String config) {
+        return measureConfig(config).delayMs;
+    }
+
+    public static DelayMeasure measureConfig(final String config) {
+        if (config == null || config.trim().isEmpty()) {
+            return new DelayMeasure(-1, "empty config");
+        }
         try {
-            JSONObject config_json = new JSONObject(config);
-            config_json.remove("routing");
-            config_json.remove("dns");
+            JSONObject configJson = new JSONObject(config);
+            configJson.remove("routing");
+            configJson.remove("dns");
             JSONObject routing = new JSONObject();
             routing.put("domainStrategy", "IPIfNonMatch");
-            config_json.put("routing", routing);
-            config_json.put("dns", new JSONObject("{\n" +
+            configJson.put("routing", routing);
+            configJson.put("dns", new JSONObject("{\n" +
                     "    \"hosts\": {\n" +
                     "        \"domain:googleapis.cn\": \"googleapis.com\"\n" +
                     "    },\n" +
@@ -187,11 +204,22 @@ public class V2rayCoreExecutor {
                     "        \"1.1.1.1\"\n" +
                     "    ]\n" +
                     "}"));
-            return Libv2ray.measureOutboundDelay(config_json.toString(), "");
-        } catch (Exception json_error) {
-            Log.d(V2rayCoreExecutor.class.getSimpleName(), "getCurrentServerDelay -> ", json_error);
-            return -1;
+            long delay = Libv2ray.measureOutboundDelay(configJson.toString(), "");
+            if (delay <= 0) {
+                return new DelayMeasure(delay, "no handshake");
+            }
+            return new DelayMeasure(delay, null);
+        } catch (Exception error) {
+            return new DelayMeasure(-1, messageOf(error));
         }
+    }
+
+    private static String messageOf(Exception error) {
+        String message = error.getMessage();
+        if (message == null || message.trim().isEmpty()) {
+            return error.getClass().getSimpleName();
+        }
+        return message.replace('\n', ' ').trim();
     }
 
 }

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">V2ray-Example</string>
+    <string name="btn_light_theme">светлая тема</string>
+    <string name="btn_dark_theme">тёмная тема</string>
+    <string name="btn_language">Язык: Русский</string>
+    <string name="label_server">Сервер :</string>
+    <string name="label_config">Конфиг V2ray :</string>
+    <string name="hint_config">сюда вставьте конфиг v2ray</string>
+    <string name="saved_custom">Сохранённый / свой</string>
+    <string name="country_label">Страна : %1$s %2$s</string>
+    <string name="country_unknown">Страна : неизвестна</string>
+    <string name="connection_mode">режим соединения : %1$s</string>
+    <string name="server_delay">задержка сервера : %1$s</string>
+    <string name="server_delay_tap">задержка сервера : нажмите для проверки</string>
+    <string name="server_delay_measuring">задержка сервера : измерение…</string>
+    <string name="connected_delay">задержка активного сервера : %1$s</string>
+    <string name="connected_delay_wait">задержка активного сервера : дождитесь подключения</string>
+    <string name="connected_delay_measuring">задержка активного сервера : измерение…</string>
+    <string name="connection_time">время соединения : %1$s</string>
+    <string name="connection_speed">скорость : %1$s | %2$s</string>
+    <string name="connection_traffic">трафик : %1$s | %2$s</string>
+    <string name="btn_fast_connect">быстрое подключение</string>
+    <string name="btn_stop_scan">остановить</string>
+    <string name="status_not_scanned">ещё не проверялось</string>
+    <string name="status_scan_running">проверка ещё идёт</string>
+    <string name="status_stopping">остановка после текущего сервера</string>
+    <string name="status_disconnect_first">сначала отключите туннель</string>
+    <string name="status_list_empty">список серверов пуст</string>
+    <string name="status_progress">%1$d/%2$d  рабочих %3$d  мёртвых %4$d</string>
+    <string name="status_done">готово  рабочих %1$d  мёртвых %2$d</string>
+    <string name="status_stopped">остановлено  рабочих %1$d  мёртвых %2$d</string>
+    <string name="status_saved_scan">сохранённый прогон  рабочих %1$d  мёртвых %2$d</string>
+    <string name="state_connected">ПОДКЛЮЧЕНО</string>
+    <string name="state_disconnected">ОТКЛЮЧЕНО</string>
+    <string name="state_connecting">ПОДКЛЮЧЕНИЕ</string>
+</resources>
