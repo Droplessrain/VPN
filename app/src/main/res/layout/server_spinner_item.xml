@@ -7,5 +7,5 @@
     android:paddingHorizontal="12dp"
     android:paddingVertical="10dp"
     android:singleLine="true"
-    android:textColor="@color/black"
+    android:textColor="?attr/spinnerItemTextColor"
     android:textSize="14sp" />

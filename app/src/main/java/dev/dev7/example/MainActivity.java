@@ -20,6 +20,8 @@ import android.util.Log;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -32,12 +34,13 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.lang.ref.WeakReference;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -51,7 +54,6 @@ import dev.dev7.lib.v2ray.utils.V2rayConstants;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "FastConnect";
-    private static final String LIGHT_THEME = "light_theme";
     private static final AtomicBoolean SCAN_RUNNING = new AtomicBoolean(false);
     private static volatile boolean scanCancelFlag;
     private static volatile File logFile;
@@ -59,16 +61,25 @@ public class MainActivity extends AppCompatActivity {
 
     private Button connection;
     private Button fastConnect;
-    private Button themeButton;
-    private Button languageButton;
     private TextView connection_speed, connection_traffic, connection_time, server_delay, connected_server_delay, connection_mode, core_version, fastConnectStatus, serverCountry;
     private EditText v2ray_config;
     private SharedPreferences sharedPreferences;
     private BroadcastReceiver v2rayBroadCastReceiver;
     private Spinner serverList;
+    private Spinner assignCountry;
+    private CheckBox chkFavorite;
     private final List<String> serverUris = new ArrayList<>();
+    private final List<String> assignCodes = new ArrayList<>();
+    private final Map<String, ServerEntry> entriesByUri = new HashMap<>();
     private boolean restartAfterModeSwitch;
     private boolean applyingServerSelection;
+    private boolean applyingMeta;
+    private boolean russian;
+    private ListFilter currentFilter = ListFilter.ALL;
+
+    private enum ListFilter {
+        ALL, WORKING, REMAINING, UNKNOWN
+    }
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -78,10 +89,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        sharedPreferences = getSharedPreferences("conf", MODE_PRIVATE);
-        boolean lightTheme = sharedPreferences.getBoolean(LIGHT_THEME, false);
-        setTheme(lightTheme ? R.style.Theme_V2rayExample_Light : R.style.Theme_V2rayExample);
+        if (!AppPrefs.isDeveloperMode(this)) {
+            startActivity(new Intent(this, HomeActivity.class));
+            finish();
+            return;
+        }
+        sharedPreferences = AppPrefs.get(this);
+        AppPrefs.applyTheme(this);
         setContentView(R.layout.activity_main);
+        russian = LocaleHelper.LANG_RU.equals(LocaleHelper.currentLanguage(this));
         logFile = new File(getFilesDir(), "fast-connect.log");
         V2rayController.init(this, R.drawable.ic_launcher, "V2ray Android");
         connection = findViewById(R.id.btn_connection);
@@ -96,22 +112,21 @@ public class MainActivity extends AppCompatActivity {
         core_version = findViewById(R.id.core_version);
         fastConnect = findViewById(R.id.btn_fast_connect);
         fastConnectStatus = findViewById(R.id.fast_connect_status);
+        serverList = findViewById(R.id.server_list);
+        assignCountry = findViewById(R.id.assign_country);
+        chkFavorite = findViewById(R.id.chk_favorite);
         scanUi = new WeakReference<>(this);
 
         core_version.setText(V2rayController.getCoreVersion());
-        themeButton = findViewById(R.id.btn_theme);
-        themeButton.setText(lightTheme ? R.string.btn_dark_theme : R.string.btn_light_theme);
-        themeButton.setOnClickListener(view -> {
-            sharedPreferences.edit().putBoolean(LIGHT_THEME, !lightTheme).apply();
-            recreate();
-        });
-        languageButton = findViewById(R.id.btn_language);
-        languageButton.setText(R.string.btn_language);
-        languageButton.setOnClickListener(view -> {
-            LocaleHelper.toggleLanguage(this);
-            recreate();
-        });
-        v2ray_config.setText(sharedPreferences.getString("v2ray_config", getDefaultConfig()));
+        findViewById(R.id.btn_settings).setOnClickListener(v ->
+                startActivity(new Intent(this, SettingsActivity.class)));
+        findViewById(R.id.btn_manage_servers).setOnClickListener(v ->
+                startActivity(new Intent(this, ServersActivity.class)));
+
+        setupAssignCountrySpinner();
+        chkFavorite.setOnCheckedChangeListener(this::onFavoriteChanged);
+
+        v2ray_config.setText(sharedPreferences.getString("v2ray_config", ""));
         v2ray_config.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -123,16 +138,17 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void afterTextChanged(Editable s) {
-                updateCountryLabel(s == null ? "" : s.toString());
+                syncMetaFromConfig(s == null ? "" : s.toString());
             }
         });
-        updateCountryLabel(v2ray_config.getText().toString());
-        serverList = findViewById(R.id.server_list);
+        reloadServerCatalog();
         setupServerList();
+        syncMetaFromConfig(v2ray_config.getText().toString());
         connection_mode.setText(getString(R.string.connection_mode, V2rayConfigs.serviceMode.toString()));
         connection_time.setText(getString(R.string.connection_time, "00:00:00"));
         connection_speed.setText(getString(R.string.connection_speed, "0 B/s", "0 B/s"));
         connection_traffic.setText(getString(R.string.connection_traffic, "0 B", "0 B"));
+
         connection.setOnClickListener(view -> {
             sharedPreferences.edit().putString("v2ray_config", v2ray_config.getText().toString()).apply();
             if (V2rayController.getConnectionState() == V2rayConstants.CONNECTION_STATES.DISCONNECTED) {
@@ -149,6 +165,9 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         fastConnect.setOnClickListener(view -> onFastConnectClicked());
+        findViewById(R.id.btn_filter_all).setOnClickListener(v -> applyFilter(ListFilter.ALL));
+        findViewById(R.id.btn_filter_remaining).setOnClickListener(v -> applyFilter(ListFilter.REMAINING));
+        findViewById(R.id.btn_filter_unknown).setOnClickListener(v -> applyFilter(ListFilter.UNKNOWN));
         if (SCAN_RUNNING.get()) {
             fastConnect.setText(R.string.btn_stop_scan);
             fastConnectStatus.setText(R.string.status_scan_running);
@@ -239,22 +258,103 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         };
-
         ContextCompat.registerReceiver(this, v2rayBroadCastReceiver, new IntentFilter(V2RAY_SERVICE_STATICS_BROADCAST_INTENT), ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
-    public static String getDefaultConfig() {
-        return "";
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!AppPrefs.isDeveloperMode(this)) {
+            startActivity(new Intent(this, HomeActivity.class));
+            finish();
+            return;
+        }
+        reloadServerCatalog();
+        setupServerList();
+        syncMetaFromConfig(v2ray_config.getText().toString());
     }
 
-    private void updateCountryLabel(String config) {
-        boolean russian = LocaleHelper.LANG_RU.equals(LocaleHelper.currentLanguage(this));
-        CountryHelper.Info info = CountryHelper.fromConfig(config, russian);
-        if (info == null) {
+    private void reloadServerCatalog() {
+        entriesByUri.clear();
+        for (ServerEntry entry : ServerRepository.load(this)) {
+            entriesByUri.put(entry.uri, entry);
+        }
+    }
+
+    private void setupAssignCountrySpinner() {
+        assignCodes.clear();
+        assignCodes.add("");
+        assignCodes.addAll(CountryHelper.knownCodes());
+        List<String> labels = new ArrayList<>();
+        for (String code : assignCodes) {
+            labels.add(CountryHelper.labelOf(code, russian));
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.server_spinner_item, labels);
+        adapter.setDropDownViewResource(R.layout.server_spinner_item);
+        assignCountry.setAdapter(adapter);
+        assignCountry.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
+                if (!applyingMeta) {
+                    persistCurrentMeta();
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+    }
+
+    private void onFavoriteChanged(CompoundButton button, boolean checked) {
+        if (!applyingMeta) {
+            persistCurrentMeta();
+        }
+    }
+
+    private void syncMetaFromConfig(String config) {
+        ServerEntry entry = entriesByUri.get(config);
+        String code = entry != null ? entry.countryCode : CountryHelper.codeFromConfig(config);
+        boolean favorite = entry != null && entry.favorite;
+        if (code == null || code.isEmpty()) {
             serverCountry.setText(R.string.country_unknown);
         } else {
-            serverCountry.setText(getString(R.string.country_label, info.name, info.flag));
+            serverCountry.setText(getString(R.string.country_label,
+                    CountryHelper.nameOf(code, russian), CountryHelper.flagOf(code)));
         }
+        applyingMeta = true;
+        int index = assignCodes.indexOf(CountryHelper.normalize(code));
+        assignCountry.setSelection(Math.max(0, index));
+        chkFavorite.setChecked(favorite);
+        assignCountry.post(() -> applyingMeta = false);
+    }
+
+    private void persistCurrentMeta() {
+        String raw = v2ray_config.getText().toString();
+        String uri = ServerRepository.cleanServerLine(raw);
+        if (uri == null) {
+            uri = raw.trim();
+        }
+        if (uri.isEmpty()) {
+            return;
+        }
+        ServerEntry existing = entriesByUri.get(uri);
+        int countryIndex = assignCountry.getSelectedItemPosition();
+        String country = countryIndex >= 0 && countryIndex < assignCodes.size()
+                ? assignCodes.get(countryIndex)
+                : "";
+        String note = existing == null ? "" : existing.note;
+        String id = existing == null ? null : existing.id;
+        ServerEntry entry = new ServerEntry(id, uri, country, chkFavorite.isChecked(), note);
+        ServerRepository.upsert(this, entry);
+        entriesByUri.put(uri, entry);
+        if (country == null || country.isEmpty()) {
+            serverCountry.setText(R.string.country_unknown);
+        } else {
+            serverCountry.setText(getString(R.string.country_label,
+                    CountryHelper.nameOf(country, russian), CountryHelper.flagOf(country)));
+        }
+        sharedPreferences.edit().putString("v2ray_config", uri).apply();
     }
 
     private void onFastConnectClicked() {
@@ -269,7 +369,10 @@ public class MainActivity extends AppCompatActivity {
             trace("W", "fast connect skipped because a tunnel is open");
             return;
         }
-        final List<String> queue = readServerUris();
+        final List<String> queue = new ArrayList<>();
+        for (ServerEntry entry : ServerRepository.sorted(this)) {
+            queue.add(entry.uri);
+        }
         if (queue.isEmpty()) {
             fastConnectStatus.setText(R.string.status_list_empty);
             trace("W", "fast connect skipped because the server list is empty");
@@ -299,11 +402,20 @@ public class MainActivity extends AppCompatActivity {
                 String target = describe(uri);
                 trace("I", (i + 1) + "/" + total + " probe " + target);
                 V2rayController.ServerProbe probe = V2rayController.probeServer(uri);
-                if (probe.delayMs > 0) {
-                    working.add(new RatedServer(uri, probe.delayMs + "ms", true));
-                    trace("I", (i + 1) + "/" + total + " OK " + target + " " + probe.delayMs + "ms");
+                final long delayMs = probe.delayMs;
+                MainActivity host = scanUi.get();
+                if (host != null) {
+                    ServerRepository.updateProbeResult(host, uri, Math.max(0L, delayMs));
+                }
+                if (delayMs > 0) {
+                    working.add(new RatedServer(uri, delayMs + "ms", true));
+                    trace("I", (i + 1) + "/" + total + " OK " + target + " " + delayMs + "ms");
                     final List<RatedServer> passed = new ArrayList<>(working);
-                    postUi(activity -> activity.showPassedServers(passed, false));
+                    postUi(activity -> {
+                        activity.reloadServerCatalog();
+                        activity.currentFilter = ListFilter.WORKING;
+                        activity.showRatedServers(passed, "OK ", false);
+                    });
                 } else {
                     String error = probe.error == null ? "no handshake" : probe.error;
                     dead.add(new RatedServer(uri, error, false));
@@ -328,8 +440,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showScanResults(List<RatedServer> working, List<RatedServer> dead, boolean cancelled) {
-        fastConnect.setText(R.string.btn_fast_connect);
-        showPassedServers(working, true);
+        fastConnect.setText(R.string.btn_filter_working);
+        currentFilter = ListFilter.WORKING;
+        reloadServerCatalog();
+        showRatedServers(working, "OK ", true);
         String current = v2ray_config.getText().toString();
         boolean currentPassed = false;
         for (RatedServer server : working) {
@@ -347,16 +461,47 @@ public class MainActivity extends AppCompatActivity {
                 working.size(), dead.size()));
     }
 
-    private void showPassedServers(List<RatedServer> working, boolean selectFirstWhenEmpty) {
+    private void showRatedServers(List<RatedServer> rated, String markPrefix, boolean selectFirstWhenEmpty) {
+        List<ServerEntry> entries = new ArrayList<>();
+        Map<String, String> notes = new HashMap<>();
+        for (RatedServer server : rated) {
+            notes.put(server.uri, server.note);
+            ServerEntry entry = entriesByUri.get(server.uri);
+            if (entry == null) {
+                entry = new ServerEntry(null, server.uri, CountryHelper.codeFromConfig(server.uri), false, "");
+            }
+            entries.add(entry);
+        }
+        Collections.sort(entries, CountryHelper.byCountryThenNote(russian));
         List<String> ordered = new ArrayList<>();
         List<String> labels = new ArrayList<>();
         labels.add(getString(R.string.saved_custom));
-        appendRated(working, ordered, labels, new HashSet<>());
+        Set<String> seen = new HashSet<>();
+        for (ServerEntry entry : entries) {
+            if (!seen.add(entry.uri)) {
+                continue;
+            }
+            ordered.add(entry.uri);
+            String note = notes.get(entry.uri);
+            String prefix = markPrefix == null ? "" : markPrefix;
+            if (note != null && !note.isEmpty()) {
+                prefix = prefix + note;
+            }
+            labels.add(labelForUri(entry.uri, prefix.trim()));
+        }
         int selected = indexOfSaved(ordered);
-        if (selected == 0 && selectFirstWhenEmpty && !working.isEmpty()) {
+        if (selected == 0 && selectFirstWhenEmpty && !ordered.isEmpty()) {
             selected = 1;
         }
         bindServerList(ordered, labels, selected);
+    }
+
+    private void applyFilter(ListFilter filter) {
+        if (SCAN_RUNNING.get()) {
+            return;
+        }
+        currentFilter = filter;
+        setupServerList();
     }
 
     private static void trace(String level, String message) {
@@ -379,17 +524,6 @@ public class MainActivity extends AppCompatActivity {
                 writer.write('\n');
             } catch (IOException ignored) {
             }
-        }
-    }
-
-    private static void appendRated(List<RatedServer> rated, List<String> ordered, List<String> labels, Set<String> seen) {
-        for (RatedServer server : rated) {
-            if (!seen.add(server.uri)) {
-                continue;
-            }
-            ordered.add(server.uri);
-            String mark = server.ok ? "OK " + server.note : "FAIL " + shorten(server.note);
-            labels.add(mark + "  " + labelFor(server.uri, ordered.size() - 1));
         }
     }
 
@@ -424,20 +558,69 @@ public class MainActivity extends AppCompatActivity {
     private void setupServerList() {
         File workingFile = new File(getFilesDir(), "fast-connect-working.txt");
         File deadFile = new File(getFilesDir(), "fast-connect-dead.txt");
-        if (!workingFile.isFile() && !deadFile.isFile()) {
-            List<String> assets = readServerUris();
-            List<String> labels = new ArrayList<>();
-            labels.add(getString(R.string.saved_custom));
-            for (int i = 0; i < assets.size(); i++) {
-                labels.add(labelFor(assets.get(i), i));
-            }
-            bindServerList(assets, labels, indexOfSaved(assets));
-            return;
-        }
         List<RatedServer> working = readRatedServers(workingFile);
-        showPassedServers(working, false);
-        int deadCount = readRatedServers(deadFile).size();
-        fastConnectStatus.setText(getString(R.string.status_saved_scan, working.size(), deadCount));
+        List<RatedServer> dead = readRatedServers(deadFile);
+
+        if (currentFilter == ListFilter.WORKING) {
+            if (!workingFile.isFile()) {
+                fastConnectStatus.setText(R.string.status_filter_need_scan);
+                currentFilter = ListFilter.ALL;
+            } else {
+                showRatedServers(working, "OK ", false);
+                fastConnectStatus.setText(getString(R.string.status_saved_scan, working.size(), dead.size()));
+                return;
+            }
+        }
+
+        if (currentFilter == ListFilter.REMAINING) {
+            if (!workingFile.isFile() && !deadFile.isFile()) {
+                fastConnectStatus.setText(R.string.status_filter_need_scan);
+                currentFilter = ListFilter.ALL;
+            } else {
+                showRatedServers(dead, "FAIL ", false);
+                fastConnectStatus.setText(getString(R.string.status_filter_remaining, dead.size()));
+                return;
+            }
+        }
+
+        List<ServerEntry> all = ServerRepository.sorted(this);
+        List<String> ordered = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        labels.add(getString(R.string.saved_custom));
+        for (ServerEntry entry : all) {
+            if (currentFilter == ListFilter.UNKNOWN && entry.hasCountry()) {
+                continue;
+            }
+            ordered.add(entry.uri);
+            labels.add(labelForEntry(entry));
+        }
+        bindServerList(ordered, labels, indexOfSaved(ordered));
+        if (currentFilter == ListFilter.UNKNOWN) {
+            fastConnectStatus.setText(getString(R.string.status_filter_unknown, ordered.size()));
+        } else {
+            fastConnectStatus.setText(R.string.status_filter_all);
+        }
+    }
+
+    private String labelForEntry(ServerEntry entry) {
+        String star = entry.favorite ? getString(R.string.favorite_mark) + " " : "";
+        String country = CountryHelper.labelOf(entry.countryCode, russian);
+        String note = entry.note == null || entry.note.isEmpty() ? shortHost(entry.uri) : entry.note;
+        if (note.length() > 40) {
+            note = note.substring(0, 40);
+        }
+        String delay = entry.delayMs > 0 ? "  ·  " + entry.delayMs + "ms" : "";
+        return star + country + "  ·  " + note + delay;
+    }
+
+    private String labelForUri(String uri, String prefix) {
+        ServerEntry entry = entriesByUri.get(uri);
+        if (entry != null) {
+            return (prefix == null || prefix.isEmpty() ? "" : prefix + "  ") + labelForEntry(entry);
+        }
+        String countryCode = CountryHelper.codeFromConfig(uri);
+        String country = CountryHelper.labelOf(countryCode, russian);
+        return (prefix == null || prefix.isEmpty() ? "" : prefix + "  ") + country + "  ·  " + shortHost(uri);
     }
 
     private int indexOfSaved(List<String> uris) {
@@ -453,7 +636,7 @@ public class MainActivity extends AppCompatActivity {
     private void bindServerList(List<String> uris, List<String> labels, int selected) {
         serverUris.clear();
         serverUris.addAll(uris);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.server_spinner_item, labels);
         adapter.setDropDownViewResource(R.layout.server_spinner_item);
         applyingServerSelection = true;
         serverList.setAdapter(adapter);
@@ -491,7 +674,7 @@ public class MainActivity extends AppCompatActivity {
                 if (parts.length < 3) {
                     continue;
                 }
-                String uri = cleanServerLine(parts[2]);
+                String uri = ServerRepository.cleanServerLine(parts[2]);
                 if (uri == null) {
                     continue;
                 }
@@ -519,77 +702,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private List<String> readServerUris() {
-        LinkedHashSet<String> uris = new LinkedHashSet<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(getAssets().open("servers.txt"), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String uri = cleanServerLine(line);
-                if (uri != null) {
-                    uris.add(uri);
-                }
-            }
-        } catch (IOException ignored) {
-        }
-        return new ArrayList<>(uris);
-    }
-
-    static String cleanServerLine(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String line = raw.trim();
-        int comment = line.indexOf(" #");
-        if (comment > 0) {
-            line = line.substring(0, comment).trim();
-        }
-        if (!(line.startsWith("ss://") || line.startsWith("vless://") || line.startsWith("vmess://") || line.startsWith("trojan://"))) {
-            return null;
-        }
-        if (line.startsWith("vmess://")) {
-            return line.length() > "vmess://".length() ? line : null;
-        }
-        int at = line.indexOf('@');
-        if (at <= "ss://".length() || !line.contains(":")) {
-            return null;
-        }
-        return line;
-    }
-
-    private static String labelFor(String uri, int index) {
-        String scheme = uri.substring(0, uri.indexOf("://"));
-        String remark = "";
-        int hash = uri.lastIndexOf('#');
-        if (hash >= 0 && hash < uri.length() - 1) {
-            remark = decode(uri.substring(hash + 1));
-        }
-        String host = hostOf(uri);
-        String title = remark.isEmpty() ? host : remark;
-        if (title.length() > 72) {
-            title = title.substring(0, 72);
-        }
-        return (index + 1) + ". " + scheme + "  " + title;
-    }
-
     private static String describe(String uri) {
         if (uri == null || uri.trim().isEmpty()) {
             return "empty config";
         }
         int schemeEnd = uri.indexOf("://");
         String scheme = schemeEnd > 0 ? uri.substring(0, schemeEnd) : "config";
-        String host = hostOf(uri);
+        String host = shortHost(uri);
         return host.isEmpty() ? scheme : scheme + " " + host;
     }
 
-    private static String shorten(String value) {
-        if (value == null) {
-            return "";
-        }
-        String oneLine = value.replace('\n', ' ').trim();
-        return oneLine.length() > 42 ? oneLine.substring(0, 42) : oneLine;
-    }
-
-    private static String hostOf(String uri) {
+    private static String shortHost(String uri) {
         int at = uri.indexOf('@');
         if (at < 0) {
             return "";
@@ -604,14 +727,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return uri.substring(start, end);
-    }
-
-    private static String decode(String value) {
-        try {
-            return URLDecoder.decode(value, "UTF-8");
-        } catch (Exception e) {
-            return value;
-        }
     }
 
     private String selectedRemark() {

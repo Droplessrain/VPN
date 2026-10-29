@@ -6,10 +6,17 @@ import org.json.JSONObject;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 final class CountryHelper {
+
+    static final String UNKNOWN = "";
 
     private static final Map<String, String[]> NAMES = new HashMap<>();
 
@@ -73,13 +80,69 @@ final class CountryHelper {
     }
 
     static final class Info {
+        final String code;
         final String flag;
         final String name;
 
-        Info(String flag, String name) {
+        Info(String code, String flag, String name) {
+            this.code = code;
             this.flag = flag;
             this.name = name;
         }
+    }
+
+    static List<String> knownCodes() {
+        List<String> codes = new ArrayList<>(NAMES.keySet());
+        Collections.sort(codes);
+        return codes;
+    }
+
+    static String nameOf(String code, boolean russian) {
+        if (code == null || code.isEmpty()) {
+            return russian ? "Неизвестно" : "Unknown";
+        }
+        String normalized = normalize(code);
+        String[] names = NAMES.get(normalized);
+        if (names == null && "UK".equals(normalized)) {
+            names = NAMES.get("GB");
+        }
+        if (names == null) {
+            return normalized;
+        }
+        return russian ? names[1] : names[0];
+    }
+
+    static String flagOf(String code) {
+        if (code == null || code.isEmpty()) {
+            return "🏳️";
+        }
+        String normalized = normalize(code);
+        if ("UK".equals(normalized)) {
+            normalized = "GB";
+        }
+        if (normalized.length() != 2) {
+            return "🏳️";
+        }
+        char a = Character.toUpperCase(normalized.charAt(0));
+        char b = Character.toUpperCase(normalized.charAt(1));
+        if (a < 'A' || a > 'Z' || b < 'A' || b > 'Z') {
+            return "🏳️";
+        }
+        return new String(Character.toChars(0x1F1E6 + (a - 'A')))
+                + new String(Character.toChars(0x1F1E6 + (b - 'A')));
+    }
+
+    static String labelOf(String code, boolean russian) {
+        return flagOf(code) + "  " + nameOf(code, russian);
+    }
+
+    static String normalize(String code) {
+        return code == null ? "" : code.trim().toUpperCase(Locale.US);
+    }
+
+    static String codeFromConfig(String config) {
+        Info info = fromConfig(config, false);
+        return info == null ? UNKNOWN : info.code;
     }
 
     static Info fromConfig(String config, boolean russian) {
@@ -101,11 +164,36 @@ final class CountryHelper {
             }
             String code = "" + (char) ('A' + (first - 0x1F1E6)) + (char) ('A' + (second - 0x1F1E6));
             String flag = new String(Character.toChars(first)) + new String(Character.toChars(second));
-            String[] names = NAMES.get(code);
-            String name = names == null ? code : (russian ? names[1] : names[0]);
-            return new Info(flag, name);
+            return new Info(code, flag, nameOf(code, russian));
         }
         return null;
+    }
+
+    static Comparator<ServerEntry> byCountryThenNote(boolean russian) {
+        return (a, b) -> {
+            boolean unknownA = a.countryCode == null || a.countryCode.isEmpty();
+            boolean unknownB = b.countryCode == null || b.countryCode.isEmpty();
+            if (unknownA != unknownB) {
+                return unknownA ? 1 : -1;
+            }
+            String nameA = nameOf(a.countryCode, russian);
+            String nameB = nameOf(b.countryCode, russian);
+            int byCountry = nameA.compareToIgnoreCase(nameB);
+            if (byCountry != 0) {
+                return byCountry;
+            }
+            boolean favA = a.favorite;
+            boolean favB = b.favorite;
+            if (favA != favB) {
+                return favA ? -1 : 1;
+            }
+            if (a.delayMs > 0 && b.delayMs > 0 && a.delayMs != b.delayMs) {
+                return Long.compare(a.delayMs, b.delayMs);
+            }
+            String noteA = a.note == null || a.note.isEmpty() ? a.uri : a.note;
+            String noteB = b.note == null || b.note.isEmpty() ? b.uri : b.note;
+            return noteA.compareToIgnoreCase(noteB);
+        };
     }
 
     private static String remarkOf(String uri) {
