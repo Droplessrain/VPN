@@ -64,5 +64,19 @@
             android:layout_height="wrap_content"
             android:text="@string/mode_developer_hint"
             android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_about"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/btn_about" />
+
+        <Button
+            android:id="@+id/btn_privacy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/btn_privacy_policy" />
     </LinearLayout>
 </ScrollView>

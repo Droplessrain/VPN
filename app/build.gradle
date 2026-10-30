@@ -3,16 +3,16 @@ plugins {
 }
 
 android {
-    namespace 'dev.dev7.example'
+    namespace 'app.orbitvpn.client'
     compileSdk 34
 
     defaultConfig {
-        applicationId "dev.dev7.example"
+        applicationId "app.orbitvpn.client"
         minSdk 21
         targetSdk 34
-        versionCode 11
-        versionName "8.1823"
-        setProperty("archivesBaseName", rootProject.name + "-" + versionName)
+        versionCode 12
+        versionName "1.0.0"
+        setProperty("archivesBaseName", "OrbitVPN-" + versionName)
     }
 
     buildTypes {

@@ -1,4 +1,4 @@
-package dev.dev7.example;
+package app.orbitvpn.client;
 
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.SERVICE_CONNECTION_STATE_BROADCAST_EXTRA;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.SERVICE_DOWNLOAD_SPEED_BROADCAST_EXTRA;
@@ -99,7 +99,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         russian = LocaleHelper.LANG_RU.equals(LocaleHelper.currentLanguage(this));
         logFile = new File(getFilesDir(), "fast-connect.log");
-        V2rayController.init(this, R.drawable.ic_launcher, "V2ray Android");
+        V2rayController.init(this, R.mipmap.ic_launcher, getString(R.string.app_name));
         connection = findViewById(R.id.btn_connection);
         connection_speed = findViewById(R.id.connection_speed);
         connection_time = findViewById(R.id.connection_duration);
@@ -431,6 +431,17 @@ public class MainActivity extends AppCompatActivity {
             writeRatedServers(new File(filesDir, "fast-connect-working.txt"), working);
             writeRatedServers(new File(filesDir, "fast-connect-dead.txt"), dead);
             boolean cancelled = scanCancelFlag;
+            if (!cancelled && !working.isEmpty()) {
+                java.util.HashSet<String> keep = new java.util.HashSet<>();
+                for (RatedServer server : working) {
+                    keep.add(server.uri);
+                }
+                MainActivity host = scanUi.get();
+                if (host != null) {
+                    int removed = ServerRepository.retainUris(host, keep);
+                    trace("I", "removed inactive servers " + removed + ", kept " + keep.size());
+                }
+            }
             trace("I", "fast connect " + (cancelled ? "stopped" : "done") + " working " + working.size() + " dead " + dead.size());
             SCAN_RUNNING.set(false);
             final List<RatedServer> workingResult = working;

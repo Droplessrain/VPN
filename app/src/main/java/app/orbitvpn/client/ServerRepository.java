@@ -1,4 +1,4 @@
-package dev.dev7.example;
+package app.orbitvpn.client;
 
 import android.content.Context;
 
@@ -168,6 +168,35 @@ final class ServerRepository {
             }
         }
         save(context, servers);
+    }
+
+    static int retainUris(Context context, java.util.Collection<String> keepUris) {
+        java.util.HashSet<String> keep = new java.util.HashSet<>(keepUris);
+        List<ServerEntry> servers = load(context);
+        List<ServerEntry> retained = new ArrayList<>();
+        for (ServerEntry server : servers) {
+            if (keep.contains(server.uri)) {
+                retained.add(server);
+            }
+        }
+        save(context, retained);
+        return servers.size() - retained.size();
+    }
+
+    static int removeUris(Context context, java.util.Collection<String> dropUris) {
+        java.util.HashSet<String> drop = new java.util.HashSet<>(dropUris);
+        List<ServerEntry> servers = load(context);
+        List<ServerEntry> retained = new ArrayList<>();
+        for (ServerEntry server : servers) {
+            if (!drop.contains(server.uri)) {
+                retained.add(server);
+            }
+        }
+        int removed = servers.size() - retained.size();
+        if (removed > 0) {
+            save(context, retained);
+        }
+        return removed;
     }
 
     private static List<ServerEntry> seedFromAssets(Context context) {

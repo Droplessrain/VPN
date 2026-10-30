@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">V2ray-Example</string>
+    <string name="app_name">Orbit VPN</string>
+    <string name="btn_about">About</string>
+    <string name="btn_privacy_policy">Privacy policy</string>
+    <string name="privacy_title">Privacy policy</string>
+    <string name="about_version_format">Version %1$s (%2$d)</string>
+    <string name="about_body">Orbit VPN is an independent client for connecting to endpoints you configure yourself. Server lists, favorites and preferences stay on this device.</string>
+    <string name="about_core_credit">Connection engine is based on an open Xray/V2Ray Android library. This app is not affiliated with the original V2ray-Android example package.</string>
     <string name="page_one_title">Page 1</string>
     <string name="btn_connect">Connect</string>
     <string name="btn_disconnect">Disconnect</string>

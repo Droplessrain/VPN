@@ -1,4 +1,4 @@
-package dev.dev7.example;
+package app.orbitvpn.client;
 
 import org.json.JSONException;
 import org.json.JSONObject;

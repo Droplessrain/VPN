@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">V2ray-Example</string>
+    <string name="app_name">Orbit VPN</string>
+    <string name="btn_about">О приложении</string>
+    <string name="btn_privacy_policy">Политика конфиденциальности</string>
+    <string name="privacy_title">Политика конфиденциальности</string>
+    <string name="about_version_format">Версия %1$s (%2$d)</string>
+    <string name="about_body">Orbit VPN — самостоятельный клиент для подключения к серверам, которые вы настраиваете сами. Списки, избранное и настройки хранятся на этом устройстве.</string>
+    <string name="about_core_credit">Движок соединения основан на открытой Android-библиотеке Xray/V2Ray. Приложение не связано с исходным пакетом-примером V2ray-Android.</string>
     <string name="page_one_title">Страница 1</string>
     <string name="btn_connect">Подключиться</string>
     <string name="btn_disconnect">Отключить</string>

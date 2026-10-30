@@ -1,4 +1,4 @@
-package dev.dev7.example;
+package app.orbitvpn.client;
 
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.SERVICE_CONNECTION_STATE_BROADCAST_EXTRA;
 import static dev.dev7.lib.v2ray.utils.V2rayConstants.V2RAY_SERVICE_STATICS_BROADCAST_INTENT;
@@ -52,7 +52,7 @@ public class HomeActivity extends AppCompatActivity {
         }
         AppPrefs.applyTheme(this);
         setContentView(R.layout.activity_home);
-        V2rayController.init(this, R.drawable.ic_launcher, "V2ray Android");
+        V2rayController.init(this, R.mipmap.ic_launcher, getString(R.string.app_name));
 
         connectButton = findViewById(R.id.btn_connect);
         statusView = findViewById(R.id.home_status);

@@ -1,4 +1,4 @@
-package dev.dev7.example;
+package app.orbitvpn.client;
 
 import android.app.Application;
 

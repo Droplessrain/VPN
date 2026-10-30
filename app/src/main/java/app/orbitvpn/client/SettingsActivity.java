@@ -1,4 +1,4 @@
-package dev.dev7.example;
+package app.orbitvpn.client;
 
 import android.content.Context;
 import android.content.Intent;
@@ -55,5 +55,9 @@ public class SettingsActivity extends AppCompatActivity {
             startActivity(intent);
             finish();
         });
+        findViewById(R.id.btn_about).setOnClickListener(v ->
+                startActivity(new Intent(this, AboutActivity.class)));
+        findViewById(R.id.btn_privacy).setOnClickListener(v ->
+                startActivity(new Intent(this, PrivacyPolicyActivity.class)));
     }
 }
